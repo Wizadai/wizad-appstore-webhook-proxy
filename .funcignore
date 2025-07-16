@@ -1,1 +1,11 @@
 .venv
+.vscode
+.github
+test_server.py
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+.env
+.DS_Store
+README.md
