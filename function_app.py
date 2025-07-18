@@ -44,7 +44,7 @@ def HealthCheck(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500
         )
 
-@app.route(route="webhook")
+@app.route(route="webhook", auth_level=func.AuthLevel.ANONYMOUS)
 def AppStoreWebhookProxy(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Processing Apple App Store notification')
     

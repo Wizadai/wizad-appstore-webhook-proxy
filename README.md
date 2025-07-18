@@ -23,9 +23,10 @@ App Store Connect → Azure Functions Proxy → Backend 1
 
 ## 📋 Requirements
 
-- Python 3.8+
-- Azure Functions Core Tools
-- Azure Functions Python Worker Runtime
+- Python 3.11 (required for Azure Functions deployment)
+- Azure Functions Core Tools v4
+- Azure Functions Python Worker Runtime v2
+- VS Code with Azure Functions extension (recommended for deployment)
 
 ## 🛠️ Installation
 
@@ -75,9 +76,28 @@ The proxy automatically discovers all `BACKEND_*_URL` variables and processes th
 
 ## 🔗 API Endpoints
 
+### GET /api/health
+
+**Description:** Health check endpoint for monitoring the proxy status and backend configuration.
+
+**Authentication:** Requires function key (`?code=YOUR_FUNCTION_KEY`)
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "Fri, 18 Jul 2025 07:00:00 GMT", 
+  "total_backends": 2,
+  "active_backends": 1,
+  "backend_urls": ["https://your-backend-1.com/webhook"]
+}
+```
+
 ### POST /api/webhook
 
 **Description:** Receives App Store Connect notifications and forwards them to configured backends.
+
+**Authentication:** Anonymous (no authentication required for webhook endpoint)
 
 **Headers:**
 - `Content-Type: application/json`
@@ -176,6 +196,40 @@ curl -X POST http://localhost:7071/api/webhook \
 
 **Expected:** Returns `200 OK`, handles different notification types correctly.
 
+### Testing Deployed Endpoints
+
+Once deployed to Azure, test your endpoints:
+
+#### Health Check Test
+```bash
+curl "https://your-function-app.azurewebsites.net/api/health?code=YOUR_FUNCTION_KEY"
+```
+
+**Expected Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "Fri, 18 Jul 2025 07:00:00 GMT",
+  "total_backends": 2,
+  "active_backends": 1, 
+  "backend_urls": ["https://your-backend-1.com/webhook"]
+}
+```
+
+#### Webhook Test
+```bash
+curl -X POST "https://your-function-app.azurewebsites.net/api/webhook" \
+  -H "Content-Type: application/json" \
+  -H "X-Apple-Signature: test-signature" \
+  -H "X-Apple-Notification-Type: DID_CHANGE_RENEWAL_STATUS" \
+  -d '{
+    "notificationType": "DID_CHANGE_RENEWAL_STATUS",
+    "data": {"bundleId": "com.example.app"}
+  }'
+```
+
+**Expected:** Returns `200 OK` if backends configured, or `500` with "No active backends configured" if not yet configured.
+
 #### ✅ Test 4: Backend Filtering
 ```bash
 # Set BACKEND_2_ACTIVE to "false" in local.settings.json
@@ -197,7 +251,40 @@ curl -X POST http://localhost:7071/api/webhook \
 
 ## 🚀 Deployment
 
-### Azure Functions Deployment
+### Option 1: VS Code Deployment (Recommended)
+
+1. **Install VS Code Azure Functions Extension:**
+   - Install the Azure Functions extension in VS Code
+   - Sign in to your Azure account
+
+2. **Setup Python 3.11 Environment:**
+   ```bash
+   # Install Python 3.11 using pyenv (macOS)
+   pyenv install 3.11.9
+   pyenv local 3.11.9
+   
+   # Create virtual environment
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+
+3. **Deploy from VS Code:**
+   - Press `Cmd+Shift+P` (or `Ctrl+Shift+P` on Windows)
+   - Type "Azure Functions: Deploy to Function App"
+   - Select your Azure subscription
+   - Choose "Create new Function App" or select existing one
+   - Select Python 3.11 runtime
+   - Wait for deployment to complete
+
+4. **Configure Environment Variables:**
+   - In VS Code Azure extension, navigate to your Function App
+   - Right-click → "Edit Settings"
+   - Add your backend configuration variables
+
+### Option 2: Azure CLI Deployment
 
 1. **Create an Azure Functions App:**
    ```bash
@@ -205,7 +292,7 @@ curl -X POST http://localhost:7071/api/webhook \
      --resource-group myResourceGroup \
      --consumption-plan-location westus \
      --runtime python \
-     --runtime-version 3.9 \
+     --runtime-version 3.11 \
      --functions-version 4 \
      --name myAppStoreWebhookProxy \
      --storage-account mystorageaccount
@@ -228,9 +315,18 @@ curl -X POST http://localhost:7071/api/webhook \
    func azure functionapp publish myAppStoreWebhookProxy
    ```
 
-4. **Configure App Store Connect:**
-   - Use the Azure Functions URL: `https://myAppStoreWebhookProxy.azurewebsites.net/api/webhook`
-   - Set up your webhook endpoint in App Store Connect
+### Production Deployment Example
+
+**Deployed Function App:** `wizad-webhook-proxy`
+- **Health Endpoint:** `https://wizad-webhook-proxy.azurewebsites.net/api/health?code=YOUR_FUNCTION_KEY`
+- **Webhook Endpoint:** `https://wizad-webhook-proxy.azurewebsites.net/api/webhook`
+
+### App Store Connect Configuration
+
+Use the clean webhook URL in App Store Connect (no authentication parameters needed):
+```
+https://your-function-app.azurewebsites.net/api/webhook
+```
 
 ### Environment Variables for Production
 
@@ -257,10 +353,22 @@ View logs in Azure Portal under your Function App → Monitor → Logs.
 
 ## 🔒 Security
 
+- **Anonymous Webhook Access**: The webhook endpoint (`/api/webhook`) allows anonymous access for App Store Connect
+- **Secured Health Check**: The health endpoint (`/api/health`) requires function key authentication
 - **Signature Validation**: The proxy forwards Apple's `X-Apple-Signature` header to backends for validation
-- **Function-Level Authentication**: Uses Azure Functions' built-in authentication (`AuthLevel.FUNCTION`)
 - **HTTPS Only**: Ensure all backend URLs use HTTPS in production
 - **Backend Validation**: Each backend should validate the Apple signature independently
+
+### Function Keys
+
+- **Health Check**: Requires function key for monitoring access
+  ```bash
+  curl "https://your-app.azurewebsites.net/api/health?code=YOUR_FUNCTION_KEY"
+  ```
+- **Webhook**: No authentication required (anonymous access for App Store Connect)
+  ```bash
+  curl -X POST "https://your-app.azurewebsites.net/api/webhook" -d "{...}"
+  ```
 
 ## 🤝 Contributing
 
